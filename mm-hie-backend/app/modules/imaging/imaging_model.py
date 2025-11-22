@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
+from torchvision.models import resnet50, ResNet50_Weights
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
@@ -22,51 +22,51 @@ from ...utils.s3_client import get_s3_client
 logger = logging.getLogger(__name__)
 
 
-class _EfficientNetHead(nn.Module):
-    def __init__(self, in_features: int, embedding_dim: int, num_classes: int) -> None:
-        super().__init__()
-        self.fc1 = nn.Linear(in_features, embedding_dim)
-        self.act = nn.ReLU()
-        self.fc2 = nn.Linear(embedding_dim, num_classes)
-
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:  # type: ignore[override]
-        emb = self.act(self.fc1(x))
-        logits = self.fc2(emb)
-        return emb, logits
-
-
 class ImagingModel:
     def __init__(self) -> None:
         self.device = torch.device("cpu")
 
-        # Use modern TorchVision weights API. The returned weights object
-        # exposes a full preprocessing pipeline via weights.transforms(),
-        # which already includes resize, crop, tensor conversion and
-        # normalization. This keeps the preprocessing aligned with the
-        # pretrained checkpoint and avoids attribute errors such as
-        # `ImageClassification` having no `normalize` attribute.
-        weights = EfficientNet_B0_Weights.IMAGENET1K_V1
-        backbone = efficientnet_b0(weights=weights)
-        in_features = backbone.classifier[1].in_features
-        embedding_dim = 512
-
-        backbone.classifier = _EfficientNetHead(
-            in_features=in_features,
-            embedding_dim=embedding_dim,
-            num_classes=3,
+        # Use modern TorchVision weights API.
+        weights = ResNet50_Weights.IMAGENET1K_V1
+        self.model = resnet50(weights=weights)
+        
+        # Recreate the custom head from training:
+        # Linear(2048, 512) -> ReLU -> Dropout(0.3) -> Linear(512, 2)
+        num_features = self.model.fc.in_features  # 2048 for ResNet50
+        self.model.fc = nn.Sequential(
+            nn.Linear(num_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, 2)
         )
-        self.model = backbone.to(self.device).eval()
 
-        self.embedding_dim = embedding_dim
-        self.classes = ["Normal", "Pneumonia", "Edema/Effusion"]
+        # Load the trained weights
+        model_path = Path(__file__).parent / "models" / "xray_classifier_complete.pth"
+        try:
+            if model_path.exists():
+                checkpoint = torch.load(model_path, map_location=self.device)
+                # The checkpoint contains 'model_state_dict'
+                if 'model_state_dict' in checkpoint:
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                else:
+                    # Fallback if it was saved directly
+                    self.model.load_state_dict(checkpoint)
+                logger.info(f"Loaded X-Ray model from {model_path}")
+            else:
+                logger.warning(f"Model file not found at {model_path}. Using random weights for head.")
+        except Exception as e:
+            logger.error(f"Failed to load model weights: {e}")
 
-        # Full preprocessing pipeline provided by TorchVision weights.
-        # This replaces the previous manual composition that attempted to
-        # access `weights.transforms().normalize`, which is not a public
-        # attribute on the weights object in newer TorchVision versions.
+        self.model = self.model.to(self.device).eval()
+
+        self.embedding_dim = 512
+        self.classes = ["NORMAL", "PNEUMONIA"]
+
+        # Use the preprocessing pipeline from the weights
         self.preprocess = weights.transforms()
 
-        self._target_layer = self.model.features[-1]
+        # Target layer for GradCAM (last conv layer of ResNet50)
+        self._target_layer = self.model.layer4[-1]
 
     @torch.inference_mode()
     def infer_bytes(self, content: bytes, case_id: Optional[str] = None) -> ImagingOutput:
@@ -82,7 +82,7 @@ class ImagingModel:
             image = Image.open(io.BytesIO(content)).convert("RGB")
 
             # Apply the TorchVision-provided preprocessing pipeline and add
-            # a batch dimension as required by EfficientNet.
+            # a batch dimension.
             x = self.preprocess(image).unsqueeze(0).to(self.device)
 
             emb, logits = self._forward_with_embedding(x)
@@ -107,10 +107,33 @@ class ImagingModel:
             return ImagingOutput(probabilities={}, gradcam_path=None, embedding=[])
 
     def _forward_with_embedding(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        feats = self.model.features(x)
-        feats = self.model.avgpool(feats)
-        feats = torch.flatten(feats, 1)
-        emb, logits = self.model.classifier(feats)
+        # ResNet50 forward pass up to fc
+        x = self.model.conv1(x)
+        x = self.model.bn1(x)
+        x = self.model.relu(x)
+        x = self.model.maxpool(x)
+
+        x = self.model.layer1(x)
+        x = self.model.layer2(x)
+        x = self.model.layer3(x)
+        x = self.model.layer4(x)
+
+        x = self.model.avgpool(x)
+        x = torch.flatten(x, 1)
+        
+        # Custom head forward pass to extract embedding
+        # model.fc is Sequential(Linear, ReLU, Dropout, Linear)
+        
+        # 1. Linear (2048 -> 512)
+        emb = self.model.fc[0](x)
+        # 2. ReLU
+        emb = self.model.fc[1](emb)
+        
+        # 3. Dropout
+        out = self.model.fc[2](emb)
+        # 4. Linear (512 -> 2)
+        logits = self.model.fc[3](out)
+        
         return emb, logits
 
     def _compute_gradcam(

@@ -1,0 +1,7 @@
+model:
+  name: agent_brain_small
+  hidden_size: 256
+train:
+  batch_size: 8
+  lr: 1e-4
+  epochs: 1

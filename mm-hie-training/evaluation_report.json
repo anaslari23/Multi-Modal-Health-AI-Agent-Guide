@@ -1,0 +1,25 @@
+{
+  "generated_at": "2025-11-17T12:07:28.620975Z",
+  "modalities": {
+    "nlp": {
+      "checkpoint_dir": "/Users/anaslari/Desktop/doctor_online/mm-hie-training/checkpoints/nlp",
+      "checkpoint_exists": true
+    },
+    "imaging": {
+      "checkpoint_dir": "/Users/anaslari/Desktop/doctor_online/mm-hie-training/checkpoints/imaging",
+      "checkpoint_exists": true
+    },
+    "vitals": {
+      "checkpoint_dir": "/Users/anaslari/Desktop/doctor_online/mm-hie-training/checkpoints/vitals",
+      "checkpoint_exists": true
+    },
+    "fusion": {
+      "checkpoint_dir": "/Users/anaslari/Desktop/doctor_online/mm-hie-training/checkpoints/fusion",
+      "checkpoint_exists": true
+    },
+    "agent": {
+      "checkpoint_dir": "/Users/anaslari/Desktop/doctor_online/mm-hie-training/checkpoints/agent",
+      "checkpoint_exists": true
+    }
+  }
+}

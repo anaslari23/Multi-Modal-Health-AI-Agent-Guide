@@ -1,0 +1,25 @@
+torch>=2.0
+torchvision
+transformers>=4.30
+datasets
+sentencepiece
+scikit-learn
+pandas
+numpy
+tqdm
+matplotlib
+opencv-python
+Pillow
+albumentations
+pytorch-lightning>=1.9
+tensorboard
+wandb
+accelerate>=0.26.0
+pytorch-gradcam
+
+# OCR / other (if used)
+paddleocr
+
+# for calibration & saving
+joblib
+scipy

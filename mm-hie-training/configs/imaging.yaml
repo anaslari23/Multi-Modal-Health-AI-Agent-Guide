@@ -1,0 +1,8 @@
+model:
+  name: efficientnet_b0
+  num_classes: 3
+train:
+  batch_size: 8
+  lr: 1e-4
+  epochs: 1
+  image_size: 224

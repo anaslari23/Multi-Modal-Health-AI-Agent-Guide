@@ -1,0 +1,26 @@
+train:
+  epochs: 8
+  batch_size: 16
+  lr: 2e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+  fp16: true
+  gradient_checkpointing: true
+  logging_steps: 50
+  embed_batch_size: 32
+
+data:
+  train_path: data/nlp/train_large.jsonl
+  val_path: data/nlp/val_large.jsonl
+  max_length: 256
+  label_vocab: data/nlp/labels_large.json
+
+model:
+  pretrained: emilyalsentzer/Bio_ClinicalBERT
+  num_labels: 50
+
+logging:
+  wandb_project: mmhie-nlp-large
+  checkpoint_dir: checkpoints/nlp
+  logging_dir: logs/nlp_large
+  embedding_dir: nlp_embeddings

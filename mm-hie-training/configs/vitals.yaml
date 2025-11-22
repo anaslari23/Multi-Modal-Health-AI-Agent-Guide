@@ -1,0 +1,8 @@
+model:
+  name: vitals_transformer
+  d_model: 128
+train:
+  batch_size: 32
+  lr: 1e-3
+  epochs: 1
+  window_size: 60

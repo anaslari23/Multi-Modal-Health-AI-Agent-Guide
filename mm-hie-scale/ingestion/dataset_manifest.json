@@ -1,0 +1,4 @@
+{
+  "description": "Top-level manifest template for HF-ingested datasets.\n\nEach dataset will also have its own manifest at\n  data/processed/<dataset_name>/manifest.json\n\nThis file can be extended to aggregate high-level stats across datasets\n(e.g. total episodes, modality breakdown). For now it is a placeholder\nstructure that callers can safely read and extend.",
+  "datasets": {}
+}
