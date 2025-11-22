@@ -243,3 +243,12 @@ def get_timeline(db: Session, case_id: uuid.UUID) -> List[Dict[str, Any]]:
 
     items.sort(key=lambda x: x["created_at"])
     return items
+
+
+def delete_case(db: Session, case_id: uuid.UUID) -> bool:
+    case = get_case(db, case_id)
+    if case:
+        db.delete(case)
+        db.commit()
+        return True
+    return False

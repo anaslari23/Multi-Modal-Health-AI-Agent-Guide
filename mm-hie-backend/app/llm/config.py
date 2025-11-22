@@ -28,7 +28,7 @@ class LLMConfig:
         """Build config from environment variables."""
 
         # model_name = os.getenv("MMHIE_REASONER_MODEL", cls.model_name)
-        model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  # Much faster on CPU
+        model_name = "tinyllama:latest"  # Much faster on CPU
         print(f"DEBUG: FORCED model_name: {model_name}")
 
         # Optional test override to avoid loading very large models in CI.

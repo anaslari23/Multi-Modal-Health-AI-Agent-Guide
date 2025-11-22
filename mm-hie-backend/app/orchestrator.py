@@ -76,6 +76,7 @@ class Orchestrator:
             self.fusion_model = MultimodalTransformerFusion()
 
     def create_case(self, case: CaseCreate, db: Session) -> str:
+        logger.info(f"Creating case for patient_id={case.patient_id}")
         db_case = crud.create_case(
             db,
             patient_name=case.patient_id,
@@ -83,6 +84,7 @@ class Orchestrator:
             patient_gender=None,
         )
         case_id = str(db_case.id)
+        logger.info(f"Created case with id={case_id}")
         self.cases[case_id] = {
             "meta": case.dict(),
             "nlp": None,
@@ -257,17 +259,23 @@ class Orchestrator:
         return " | ".join(parts)
 
     def add_symptoms(self, case_id: str, payload: SymptomInput, db: Session):
+        logger.info(f"Adding symptoms to case_id={case_id}")
         # Get case from memory first (auto-initializes if needed)
         case = self._get_case(case_id)
+        logger.info(f"Retrieved case from memory")
         
         # Verify case exists in database
         db_case = crud.get_case(db, case_id)
         if db_case is None:
             raise KeyError(case_id)
+        logger.info(f"Verified case exists in DB")
 
+        logger.info(f"Ensuring symptom model is loaded...")
         self._ensure_symptom_model()
         assert self.symptom_model is not None  # for type checkers
+        logger.info(f"Running NLP inference on text: {payload.text[:50]}...")
         nlp_out = self.symptom_model.infer(payload.text, top_n=payload.top_n)
+        logger.info(f"NLP inference complete")
         case["nlp"] = nlp_out
 
         # Update posterior after symptoms.
@@ -490,7 +498,17 @@ class Orchestrator:
             modality_scores=modality_scores,
         )
 
-        xai = self.xai.explain(case_id=case_id, case_data=case, fusion=fusion)
+        try:
+            xai = self.xai.explain(case_id=case_id, case_data=case, fusion=fusion)
+        except Exception as e:
+            logger.error(f"XAI generation failed: {e}")
+            from .schemas import XAIOutput
+            xai = XAIOutput(
+                summary=f"Explanation unavailable due to internal error: {e}",
+                gradcam_path=None,
+                labs_shap_path=None,
+                nlp_highlights=None,
+            )
 
         # Derive signed URLs for S3-hosted artefacts when possible.
         try:

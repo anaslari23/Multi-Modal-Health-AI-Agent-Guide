@@ -265,4 +265,16 @@ Do NOT hallucinate medicines.
 
 
 # Singleton RAG engine used by API routes and orchestrator.
-rag = RAGEngine()
+# Lazy initialization to avoid blocking server startup with vector index build
+_rag_instance: Optional[RAGEngine] = None
+
+def get_rag() -> RAGEngine:
+    """Get or create the RAG engine instance (lazy initialization)."""
+    global _rag_instance
+    if _rag_instance is None:
+        print("Initializing RAG engine (this may take a moment on first use)...")
+        _rag_instance = RAGEngine()
+    return _rag_instance
+
+# Expose as 'rag' for backward compatibility - but it's now a function call
+rag = get_rag

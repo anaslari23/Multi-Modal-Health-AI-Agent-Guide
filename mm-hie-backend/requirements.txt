@@ -29,6 +29,6 @@ pytest
 httpx
 datasets
 peft
-bitsandbytes
+# bitsandbytes (Not compatible with Mac CPU)
 accelerate
 scipy

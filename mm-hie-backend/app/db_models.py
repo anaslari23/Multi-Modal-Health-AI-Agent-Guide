@@ -169,3 +169,21 @@ class AuditLog(Base):
     )
 
     case: Mapped[Case] = relationship(back_populates="audit_logs")
+
+
+class Medicine(Base):
+    __tablename__ = "medicines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_discontinued: Mapped[bool] = mapped_column(String, default="FALSE")  # CSV has 'FALSE' string
+    manufacturer_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pack_size_label: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    short_composition1: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    short_composition2: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    salt_composition: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    medicine_desc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    side_effects: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    drug_interactions: Mapped[Optional[str]] = mapped_column(String, nullable=True)

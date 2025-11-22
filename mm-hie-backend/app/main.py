@@ -22,7 +22,10 @@ from .database import get_db
 from .routers.cases_router import router as cases_router
 from .routers.timeline_router import router as timeline_router
 from .routers.reports_router import router as reports_router
+from .routers.medicines_router import router as medicines_router
 from .agent.agent_router import router as agent_router
+from .rag.rag_router import router as rag_router
+from .routers.medical_llm_router import router as medical_llm_router
 from .federated.fed_trainer import get_federated_trainer
 
 app = FastAPI(title="MM-HIE Agent Backend", version="0.1.0")
@@ -124,4 +127,7 @@ async def get_report(case_id: str, db: Session = Depends(get_db)):
 app.include_router(cases_router)
 app.include_router(timeline_router)
 app.include_router(reports_router)
+app.include_router(medicines_router)
 app.include_router(agent_router)
+app.include_router(rag_router)
+app.include_router(medical_llm_router)

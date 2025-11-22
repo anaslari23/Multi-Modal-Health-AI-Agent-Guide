@@ -21,6 +21,6 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat", response_model=ChatAgentResponse)
-async def agent_chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatAgentResponse:
+def agent_chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatAgentResponse:
     service = ChatAgentService(orchestrator)
     return service.handle_message(message=payload.message, db=db, case_id=payload.case_id)

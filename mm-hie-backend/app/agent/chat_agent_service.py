@@ -10,16 +10,18 @@ from ..schemas import CaseCreate, SymptomInput
 from .action_schema import AgentAction, ChatAgentResponse
 from .drug_checker import DrugChecker
 from .slot_extractor import SlotExtractor
+from .. import crud
+from ..db_models import Modality
 from ..llm.reasoning_model import medical_reasoner
 
 
 DOCTOR_SYSTEM_PROMPT = """You are an expert clinical AI assistant.
 Your goal is to diagnose the patient based on their symptoms.
-- If the patient's description is vague or incomplete (missing onset, duration, severity, etc.), ask specific clarifying questions ONE BY ONE.
-- Do NOT ask multiple questions at once.
-- If you have sufficient information, provide a differential diagnosis, potential causes, and recommended next steps.
+- Review the Patient History to see what has already been discussed.
+- If the patient's description is vague or incomplete, ask ONE specific clarifying question.
+- Do NOT ask questions that have already been answered in the history.
+- If you have sufficient information, provide a differential diagnosis and recommended next steps.
 - Be empathetic, professional, and concise.
-- If suggesting medication, mention generic names and safety warnings.
 """
 
 
@@ -68,27 +70,65 @@ class ChatAgentService:
              top_conditions = ", ".join([c.condition for c in symptoms_known.conditions[:3]])
              symptoms_text = f"Current capabilities detect possible: {top_conditions}."
 
+        # Fetch chat history (previous user inputs)
+        history_text = ""
+        try:
+            # We use the 'modalities' table where type='symptoms' to find past user inputs
+            past_inputs = db.query(Modality).filter(
+                Modality.case_id == case_id,
+                Modality.type == "symptoms"
+            ).order_by(Modality.created_at).all()
+            
+            if past_inputs:
+                history_lines = []
+                for m in past_inputs:
+                    if m.payload and "input" in m.payload and "text" in m.payload["input"]:
+                        history_lines.append(f"Patient: {m.payload['input']['text']}")
+                history_text = "\n".join(history_lines)
+        except Exception:
+            pass  # Fail gracefully if DB access fails
+
         prompt = f"""{DOCTOR_SYSTEM_PROMPT}
 
 Context:
 Patient ID: {case_id}
 {symptoms_text}
 
-Patient: "{text}"
+Patient History:
+{history_text}
+
+Current Patient Input: "{text}"
 Doctor:"""
 
         # 4. Generate Response via LLM
+        # 4. Generate Response via LLM
+        reply = ""
         try:
-            # "Train" / prompt the model to be a doctor
-            response_text = medical_reasoner.generate(
-                prompt,
-                max_tokens=256,
-                temperature=0.7
-            )
-            reply = response_text.strip()
+            # Try fine-tuned model first if available
+            from ..rag.medical_llm import get_medical_llm
+            from pathlib import Path
+            
+            # Check if model exists before trying to load
+            if Path("./models/medical-medicine-lora").exists():
+                llm = get_medical_llm()
+                # Format for instruction tuning
+                instruction = f"{prompt}\n\nProvide a helpful medical response."
+                reply = llm.generate(instruction, max_new_tokens=256)
         except Exception as e:
-            # Fallback if LLM fails (e.g. model not loaded/OOM)
-            reply = f"I'm having trouble accessing my medical reasoning module ({e}). Please describe your symptoms in more detail."
+            print(f"Fine-tuned model failed, falling back to Ollama: {e}")
+
+        if not reply:
+            try:
+                # "Train" / prompt the model to be a doctor
+                response_text = medical_reasoner.generate(
+                    prompt,
+                    max_tokens=256,
+                    temperature=0.7
+                )
+                reply = response_text.strip()
+            except Exception as e:
+                # Fallback if LLM fails (e.g. model not loaded/OOM)
+                reply = f"I'm having trouble accessing my medical reasoning module ({e}). Please describe your symptoms in more detail."
 
         # 5. Determine Action Type based on response
         # If the LLM asks a question (ends with ?), it's an 'ask' action.

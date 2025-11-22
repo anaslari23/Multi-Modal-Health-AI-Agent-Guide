@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import 'analytics_screen.dart';
-import 'messages_screen.dart';
+import 'analytics_screen.dart';
 import 'search_screen.dart';
 import 'timeline_screen.dart';
 import 'clinical_report_screen.dart';
 import 'home/dashboard_screen.dart';
+import 'home/dashboard_screen.dart';
+import 'home/dashboard_screen.dart';
 import 'chat/ai_doctor_chat_screen.dart';
+import 'agent_timeline_screen.dart';
+import 'differential_diagnosis_screen.dart';
 
 class PatientDashboardScreen extends StatefulWidget {
   const PatientDashboardScreen({super.key});
@@ -30,25 +34,39 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
     _loadCases();
   }
 
-  Future<void> _loadCases() async {
+  Future<void> _loadCases({int retries = 10}) async {
     setState(() {
       _loading = true;
-      _error = null;
+      if (retries == 10) _error = null; // Only clear error on first attempt
     });
     try {
       final cases = await _api.listCases();
       if (!mounted) return;
       setState(() {
         _cases = cases;
+        _error = null;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = 'Failed to load cases: $e';
-      });
-    } finally {
-      if (mounted) {
+      
+      if (retries > 0) {
+        // Wait and retry
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          _loadCases(retries: retries - 1);
+        }
+      } else {
         setState(() {
+          _error = 'Failed to load cases: $e. \nMake sure the backend is running.';
+        });
+      }
+    } finally {
+      if (mounted && retries == 0) {
+        setState(() {
+          _loading = false;
+        });
+      } else if (mounted && _cases.isNotEmpty) {
+         setState(() {
           _loading = false;
         });
       }
@@ -62,18 +80,15 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
         title: const Text('Patient Overview'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.medical_information_outlined),
-            tooltip: 'AI Doctor Chat',
+            icon: const Icon(Icons.add),
+            tooltip: 'New Patient',
             onPressed: () {
-              Navigator.pushNamed(
-                context,
-                AiDoctorChatScreen.routeName,
-              );
+              Navigator.pushNamed(context, '/new-patient');
             },
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _loadCases,
+            onPressed: _loading ? null : () => _loadCases(),
           ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -117,7 +132,11 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (_loading) const LinearProgressIndicator(),
+            if (_loading) ...[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              const Center(child: Text('Connecting to server...', style: TextStyle(color: Colors.grey))),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(_error!, style: const TextStyle(color: Colors.red)),
@@ -133,23 +152,80 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
                         final id = c['id'] as String? ?? '';
                         final name = c['patient_name'] as String? ?? 'Unknown patient';
                         final status = c['status'] as String? ?? 'Unknown';
-                        return _PatientCard(
-                          name: name,
-                          status: status,
-                          onOpenTimeline: () {
-                            Navigator.pushNamed(
-                              context,
-                              TimelineScreen.routeName,
-                              arguments: id,
+                        return Dismissible(
+                          key: Key(id),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20),
+                            color: Colors.red,
+                            child: const Icon(Icons.delete, color: Colors.white),
+                          ),
+                          confirmDismiss: (direction) async {
+                            return await showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete Patient?'),
+                                content: Text('Are you sure you want to delete $name? This cannot be undone.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(ctx).pop(false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.of(ctx).pop(true),
+                                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              ),
                             );
                           },
-                          onOpenReport: () {
-                            Navigator.pushNamed(
-                              context,
-                              ClinicalReportScreen.routeName,
-                              arguments: id,
-                            );
+                          onDismissed: (direction) async {
+                            try {
+                              await _api.deleteCase(id);
+                              setState(() {
+                                _cases.removeAt(index);
+                              });
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('$name deleted')),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to delete: $e')),
+                                );
+                                // Refresh list to bring back the item if delete failed
+                                _loadCases();
+                              }
+                            }
                           },
+                          child: _PatientCard(
+                            name: name,
+                            status: status,
+                            onOpenTimeline: () {
+                              Navigator.pushNamed(
+                                context,
+                                AgentTimelineScreen.routeName,
+                                arguments: id,
+                              );
+                            },
+                            onOpenDiagnosis: () {
+                              Navigator.pushNamed(
+                                context,
+                                DifferentialDiagnosisScreen.routeName,
+                                arguments: id,
+                              );
+                            },
+                            onOpenReport: () {
+                              Navigator.pushNamed(
+                                context,
+                                ClinicalReportScreen.routeName,
+                                arguments: id,
+                              );
+                            },
+                          ),
                         );
                       },
                     ),
@@ -157,14 +233,9 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Colors.grey,
-        elevation: 8,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: 0,
+        onDestinationSelected: (index) {
           switch (index) {
             case 0:
               // Already on dashboard
@@ -175,36 +246,32 @@ class _PatientDashboardScreenState extends State<PatientDashboardScreen> {
             case 2:
               Navigator.pushNamed(context, AnalyticsScreen.routeName);
               break;
-            case 3:
-              Navigator.pushNamed(context, MessagesScreen.routeName);
-              break;
           }
         },
-        items: const [
-          BottomNavigationBarItem(
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Search',
+          NavigationDestination(
+            icon: Icon(Icons.medication_outlined),
+            selectedIcon: Icon(Icons.medication),
+            label: 'Medicine',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
             label: 'Analytics',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.message_outlined),
-            label: 'Messages',
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          Navigator.pushNamed(context, '/new-patient');
+          Navigator.pushNamed(context, AiDoctorChatScreen.routeName);
         },
-        icon: const Icon(Icons.add),
-        label: const Text('New Patient'),
+        icon: const Icon(Icons.medical_information_outlined),
+        label: const Text('AI Doctor'),
       ),
     );
   }
@@ -215,12 +282,14 @@ class _PatientCard extends StatelessWidget {
     required this.name,
     required this.status,
     required this.onOpenTimeline,
+    required this.onOpenDiagnosis,
     required this.onOpenReport,
   });
 
   final String name;
   final String status;
   final VoidCallback onOpenTimeline;
+  final VoidCallback onOpenDiagnosis;
   final VoidCallback onOpenReport;
 
   @override
@@ -255,6 +324,10 @@ class _PatientCard extends StatelessWidget {
                     TextButton(
                       onPressed: onOpenTimeline,
                       child: const Text('Timeline'),
+                    ),
+                    TextButton(
+                      onPressed: onOpenDiagnosis,
+                      child: const Text('Diagnosis'),
                     ),
                     TextButton(
                       onPressed: onOpenReport,

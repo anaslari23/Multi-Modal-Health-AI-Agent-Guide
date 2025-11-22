@@ -113,7 +113,23 @@ class _NewPatientIntakeScreenState extends State<NewPatientIntakeScreen>
           _PatientInfoForm(
             onContinue: () => _tabController.animateTo(1),
           ),
-          const _DataUploadTab(),
+          _DataUploadTab(
+            symptomController: _symptomTextController,
+            submitting: _submitting,
+            error: _error,
+            labFilePath: _labFilePath,
+            onLabFilePicked: (path) {
+              setState(() {
+                _labFilePath = path;
+              });
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Selected lab file: ${path.split('/').last}')),
+                );
+              }
+            },
+            onSubmit: () => _submitToBackend(context),
+          ),
         ],
       ),
     );
@@ -201,11 +217,24 @@ class _PatientInfoForm extends StatelessWidget {
 }
 
 class _DataUploadTab extends StatelessWidget {
-  const _DataUploadTab();
+  const _DataUploadTab({
+    required this.symptomController,
+    required this.submitting,
+    this.error,
+    this.labFilePath,
+    required this.onLabFilePicked,
+    required this.onSubmit,
+  });
+
+  final TextEditingController symptomController;
+  final bool submitting;
+  final String? error;
+  final String? labFilePath;
+  final Function(String) onLabFilePicked;
+  final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
-    final state = context.findAncestorStateOfType<_NewPatientIntakeScreenState>();
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -227,25 +256,14 @@ class _DataUploadTab extends StatelessWidget {
             subtitle: 'Lab Results (HL7/FHIR)',
             progress: 0.3,
             actionLabel: 'Choose Files',
-            onActionPressed: state == null
-                ? null
-                : () async {
-                    final result = await FilePicker.platform.pickFiles(
-                      type: FileType.any,
-                    );
-                    if (result != null && result.files.single.path != null) {
-                      state._labFilePath = result.files.single.path;
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Selected lab file: ${result.files.single.name}',
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  },
+            onActionPressed: () async {
+              final result = await FilePicker.platform.pickFiles(
+                type: FileType.any,
+              );
+              if (result != null && result.files.single.path != null) {
+                onLabFilePicked(result.files.single.path!);
+              }
+            },
           ),
           const SizedBox(height: 12),
           _ModalityCard(
@@ -265,7 +283,7 @@ class _DataUploadTab extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           TextField(
-            controller: state?._symptomTextController,
+            controller: symptomController,
             maxLines: 4,
             decoration: InputDecoration(
               labelText: 'Symptoms / clinical notes (sent to NLP)',
@@ -275,9 +293,9 @@ class _DataUploadTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          if (state?._error != null) ...[
+          if (error != null) ...[
             Text(
-              state!._error!,
+              error!,
               style: const TextStyle(color: Colors.red),
             ),
             const SizedBox(height: 8),
@@ -285,12 +303,8 @@ class _DataUploadTab extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: state == null || state._submitting
-                  ? null
-                  : () async {
-                      await state._submitToBackend(context);
-                    },
-              child: state?._submitting == true
+              onPressed: submitting ? null : onSubmit,
+              child: submitting
                   ? const SizedBox(
                       height: 18,
                       width: 18,

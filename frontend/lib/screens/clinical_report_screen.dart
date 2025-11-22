@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ClinicalReportScreen extends StatefulWidget {
   const ClinicalReportScreen({super.key});
@@ -219,11 +220,37 @@ class _ClinicalReportScreenState extends State<ClinicalReportScreen> {
               child: ElevatedButton.icon(
                 onPressed: (_caseId == null || _report == null)
                     ? null
-                    : () {
-                        final snack = SnackBar(
-                          content: Text('PDF generated at: ${pdfPath ?? 'unknown path'}'),
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(snack);
+                    : () async {
+                        final api = ApiClient();
+                        // If pdfPath is relative, construct full URL.
+                        // Assuming backend serves static files or presigned URLs.
+                        // If pdfPath is a local path on server, we need the static URL.
+                        // Here we assume the backend returns a relative path like 'reports/case_xyz.pdf'
+                        // and we can access it via /static/ or if it's an S3 URL.
+                        
+                        Uri? uri;
+                        if (pdfPath != null && pdfPath.startsWith('http')) {
+                           uri = Uri.parse(pdfPath);
+                        } else if (pdfPath != null) {
+                           // Fallback to static serve if local path
+                           // Strip leading './' or '/'
+                           var cleanPath = pdfPath;
+                           if (cleanPath.startsWith('./')) cleanPath = cleanPath.substring(2);
+                           if (cleanPath.startsWith('/')) cleanPath = cleanPath.substring(1);
+                           uri = Uri.parse('${api.baseUrl}/static/$cleanPath');
+                        }
+
+                        if (uri != null) {
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          } else {
+                             if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not launch PDF URL')),
+                                );
+                             }
+                          }
+                        }
                       },
                 icon: const Icon(Icons.picture_as_pdf_outlined),
                 label: const Text('Generate & Export PDF'),

@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 ///   --dart-define=API_BASE_URL=http://<your-mac-ip>:8000
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:8000',
+  defaultValue: 'http://192.168.0.141:8000',
 );
 
 class ApiClient {
@@ -20,7 +20,12 @@ class ApiClient {
 
   Future<List<Map<String, dynamic>>> listCases() async {
     final uri = Uri.parse('$baseUrl/cases/');
-    final res = await http.get(uri);
+    final res = await http.get(uri).timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('Failed to load cases: Request timed out');
+      },
+    );
     if (res.statusCode != 200) {
       throw Exception('Failed to list cases: ${res.body}');
     }
@@ -49,6 +54,11 @@ class ApiClient {
         'patient_id': patientId,
         'notes': notes,
       }),
+    ).timeout(
+      const Duration(seconds: 30),
+      onTimeout: () {
+        throw Exception('Request timed out after 30 seconds. Please check your connection.');
+      },
     );
     if (res.statusCode != 200) {
       throw Exception('Failed to create case: ${res.body}');
@@ -69,6 +79,11 @@ class ApiClient {
         'text': text,
         'top_n': topN,
       }),
+    ).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw Exception('Symptom analysis timed out after 60 seconds. The NLP model may be loading for the first time.');
+      },
     );
     if (res.statusCode != 200) {
       throw Exception('Failed to add symptoms: ${res.body}');
@@ -184,5 +199,23 @@ class ApiClient {
       throw Exception('Failed to run local training: ${res.body}');
     }
     return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+  Future<void> deleteCase(String caseId) async {
+    final uri = Uri.parse('$baseUrl/cases/$caseId');
+    final res = await http.delete(uri);
+
+    if (res.statusCode != 204) {
+      throw Exception('Failed to delete case: ${res.body}');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> searchMedicines(String query) async {
+    final uri = Uri.parse('$baseUrl/medicines/search?q=$query');
+    final res = await http.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception('Failed to search medicines: ${res.body}');
+    }
+    final decoded = jsonDecode(res.body) as List<dynamic>;
+    return decoded.cast<Map<String, dynamic>>();
   }
 }

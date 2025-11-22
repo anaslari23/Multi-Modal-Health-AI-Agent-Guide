@@ -22,20 +22,28 @@ class RAGResponse(BaseModel):
 
 @router.post("/query", response_model=RAGResponse)
 async def rag_query(payload: RAGQueryRequest) -> RAGResponse:
+    print(f"RAG Query received: {payload.question} | Symptoms: {payload.symptoms}")
     if not payload.question and not payload.symptoms:
         raise HTTPException(status_code=400, detail="Either question or symptoms must be provided")
-    result = rag.query(
-        question=payload.question,
-        symptoms=payload.symptoms,
-        patient_info=payload.patient_info,
-        top_k=payload.top_k,
-    )
-    return RAGResponse(answer=result["answer"], context=result["context"])
+    
+    try:
+        print("Calling RAG engine...")
+        result = rag().query(
+            question=payload.question,
+            symptoms=payload.symptoms,
+            patient_info=payload.patient_info,
+            top_k=payload.top_k,
+        )
+        print("RAG engine returned result.")
+        return RAGResponse(answer=result["answer"], context=result["context"])
+    except Exception as e:
+        print(f"RAG Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/diagnose", response_model=RAGResponse)
 async def rag_diagnose(payload: RAGQueryRequest) -> RAGResponse:
-    result = rag.diagnose(
+    result = rag().diagnose(
         symptoms=payload.symptoms or payload.question or "",
         patient_info=payload.patient_info,
         top_k=payload.top_k,
@@ -45,7 +53,7 @@ async def rag_diagnose(payload: RAGQueryRequest) -> RAGResponse:
 
 @router.post("/explain", response_model=RAGResponse)
 async def rag_explain(payload: RAGQueryRequest) -> RAGResponse:
-    result = rag.explain(
+    result = rag().explain(
         question=payload.question or "Explain the current diagnosis.",
         symptoms=payload.symptoms,
         patient_info=payload.patient_info,
@@ -56,7 +64,7 @@ async def rag_explain(payload: RAGQueryRequest) -> RAGResponse:
 
 @router.post("/treatment", response_model=RAGResponse)
 async def rag_treatment(payload: RAGQueryRequest) -> RAGResponse:
-    result = rag.treatment(
+    result = rag().treatment(
         question=payload.question or "Treatment options?",
         symptoms=payload.symptoms,
         patient_info=payload.patient_info,
@@ -67,7 +75,7 @@ async def rag_treatment(payload: RAGQueryRequest) -> RAGResponse:
 
 @router.post("/drug", response_model=RAGResponse)
 async def rag_drug(payload: RAGQueryRequest) -> RAGResponse:
-    result = rag.drug_info(
+    result = rag().drug_info(
         question=payload.question or payload.symptoms or "",
         patient_info=payload.patient_info,
         top_k=payload.top_k,

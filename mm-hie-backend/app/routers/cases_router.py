@@ -50,3 +50,16 @@ def get_case_detail(case_id: str, db: Session = Depends(get_db)):
         "patient_gender": case.patient_gender,
         "status": case.status,
     }
+
+
+@router.delete("/{case_id}", status_code=204)
+def delete_case(case_id: str, db: Session = Depends(get_db)):
+    try:
+        case_uuid = uuid.UUID(case_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid case id")
+
+    success = crud.delete_case(db, case_uuid)
+    if not success:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return

@@ -32,10 +32,10 @@ class MedicalReasoningLLM:
 
     def __init__(self, config: Optional[LLMConfig] = None) -> None:
         self.config = config or LLMConfig.from_env()
-        # Default to llama2:7b-chat if not specified, or use what's in config
-        self.model_name = self.config.model_name or "llama2:7b-chat"
+        # Default to tinyllama for speed, or use what's in config
+        self.model_name = self.config.model_name or "tinyllama:latest"
         # Use the standard generate endpoint
-        self.ollama_url = "http://localhost:11434/api/generate"
+        self.ollama_url = "http://127.0.0.1:11434/api/generate"
 
     def _truncate_prompt(self, prompt: str) -> str:
         if len(prompt) <= self.config.max_input_length:
