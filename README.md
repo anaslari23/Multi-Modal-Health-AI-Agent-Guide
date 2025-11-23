@@ -1,25 +1,38 @@
 # Multi‑Modal Clinical AI Agent
 
-This repository contains a **multi‑modal clinical workflow assistant** with:
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-- **Backend**: FastAPI service for case orchestration, multimodal models, conversational agent, RAG, XAI, and reporting.
-- **Frontend**: Flutter app for interactive clinical review and decision support.
+This repository contains a **multi‑modal clinical workflow assistant** that fuses **symptoms (NLP)**, **labs**, **vitals**, and **imaging** to produce differential diagnoses, uncertainty‑aware reasoning, and rich explainability. It features an **LLM-driven conversational agent** and **RAG-enhanced responses** backed by medical knowledge retrieval.
 
-The system ingests **symptoms (NLP)**, **labs**, **vitals**, and **imaging**, then produces
-fused differential diagnosis, uncertainty‑aware reasoning, and rich explainability. It features
-an **LLM-driven conversational agent** for natural clinical interviews and **RAG-enhanced responses**
-backed by medical knowledge retrieval.
+---
+
+## Table of Contents
+
+- [System Architecture](#system-architecture-overview)
+- [Quick Start](#quick-start)
+- [Key Features](#key-features)
+- [Project Structure](#project-structure)
+- [Backend Setup](#backend-setup--run-fastapi)
+- [Frontend Setup](#frontend-setup--run-flutter)
+- [API Endpoints](#key-endpoints)
+- [Fine-Tuning Guide](#fine-tuned-medical-llm-specialized)
+- [Deployment](#deployment-considerations)
 
 ---
 
 ## System Architecture Overview
+
 ```mermaid
 flowchart LR
-    %% Define Styles
-    classDef frontend fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000;
-    classDef backend fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
-    classDef ai fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000;
-    classDef db fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#000;
+    %% Define Styles - Corporate Theme
+    classDef frontend fill:#ffffff,stroke:#0052cc,stroke-width:2px,color:#172b4d;
+    classDef backend fill:#deebff,stroke:#0052cc,stroke-width:2px,color:#172b4d;
+    classDef ai fill:#f4f5f7,stroke:#172b4d,stroke-width:2px,color:#172b4d;
+    classDef db fill:#ffffff,stroke:#5e6c84,stroke-width:2px,color:#172b4d;
 
     subgraph Client [Flutter Frontend]
         UI["Intake, DDX, Imaging, Report Screens"]:::frontend
@@ -66,13 +79,51 @@ flowchart LR
     XAI -->|/static assets| UI
 ```
 
+---
+
+## Quick Start
+
+Get the system running in minutes.
+
+### 1. Start the Backend
+```bash
+cd mm-hie-backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 2. Start the Frontend
+```bash
+cd frontend
+flutter pub get
+flutter run
+```
+
+> **Note**: Ensure you have Python 3.9+ and Flutter installed.
+
+---
+
+## Tech Stack
+
+| Component | Technologies |
+|-----------|--------------|
+| **Frontend** | Flutter, Dart, Provider, Http |
+| **Backend** | FastAPI, Python, SQLAlchemy, Pydantic |
+| **AI / ML** | PyTorch, Hugging Face Transformers, PEFT/LoRA, FAISS |
+| **LLMs** | TinyLlama (Fine-Tuned), Medical Reasoning GPT-20B |
+| **Database** | SQLite (Dev), PostgreSQL (Prod), Redis |
+
+---
+
 ## UI Wireframes (Conceptual)
+
 ```mermaid
 flowchart LR
-    %% Define Styles
+    %% Define Styles - Corporate Theme
     classDef default fill:#fff,stroke:#333,stroke-width:1px;
-    classDef newFeature fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000;
-    classDef core fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000;
+    classDef newFeature fill:#ffffff,stroke:#6554c0,stroke-width:2px,stroke-dasharray: 5 5,color:#172b4d;
+    classDef core fill:#ffffff,stroke:#0052cc,stroke-width:2px,color:#172b4d;
 
     Chat["Chat Interface\n(conversational intake)"]:::core --> Intake["Patient Intake\n(symptoms, labs, vitals)"]:::core
     Intake --> DDX["Differential Diagnosis Screen\n(posterior, radar chart, vitals)"]:::core
@@ -86,13 +137,16 @@ flowchart LR
     end
 ```
 
+---
+
 ## End-to-End Process Flow
+
 ```mermaid
 flowchart TD
-    %% Define Styles
-    classDef userAction fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000;
-    classDef systemProcess fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
-    classDef aiProcess fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000;
+    %% Define Styles - Corporate Theme
+    classDef userAction fill:#ffffff,stroke:#0052cc,stroke-width:2px,color:#172b4d;
+    classDef systemProcess fill:#deebff,stroke:#0052cc,stroke-width:2px,color:#172b4d;
+    classDef aiProcess fill:#f4f5f7,stroke:#172b4d,stroke-width:2px,color:#172b4d;
 
     A[Start New Case in Flutter]:::userAction --> B[Create Case via /cases]:::systemProcess
     B --> C1[Option 1: Chat with Agent]:::userAction
@@ -110,7 +164,9 @@ flowchart TD
     L --> M[Review & Document in Clinical Workflow]:::userAction
 ```
 
-### Analysis API Sequence (Detailed)
+<details>
+<summary><strong>Click to view Detailed Analysis API Sequence</strong></summary>
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -138,6 +194,9 @@ sequenceDiagram
     API-->>Flutter: AnalysisResponse (DDX, posterior, XAI paths, summary)
     Flutter-->>User: DDX screen, imaging view, report & export
 ```
+</details>
+
+---
 
 ## Project Structure
 
@@ -199,9 +258,6 @@ sequenceDiagram
 - `mm-hie-training/` – Training code, configs, and experiments for multimodal models.
 - `mm-hie-scale/` – Data ingestion, labeling, and ontology management pipelines.
 - `FINE_TUNING_GUIDE.md` – Guide for fine-tuning medical LLMs.
-
-Top‑level platform folders (`android/`, `ios/`, `macos/`, `linux/`, `windows/`, `web/`) are
-generated by Flutter.
 
 ---
 
