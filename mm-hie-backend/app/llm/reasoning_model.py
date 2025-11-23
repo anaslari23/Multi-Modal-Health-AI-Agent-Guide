@@ -58,7 +58,7 @@ class MedicalReasoningLLM:
         max_tokens: Optional[int] = None,
         temperature: float = 0.0,
     ) -> str:
-        """Generate text using Ollama API."""
+        """Generate text using Ollama API (Legacy completion)."""
         
         prompt = self._truncate_prompt(prompt)
         effective_max_tokens = min(max_tokens or self.config.max_tokens, self.config.max_tokens)
@@ -76,7 +76,7 @@ class MedicalReasoningLLM:
 
         try:
             import httpx
-            logger.info(f"Calling Ollama ({self.model_name}) with prompt length {len(prompt)}")
+            logger.info(f"Calling Ollama generate ({self.model_name})")
             
             response = httpx.post(
                 self.ollama_url, 
@@ -92,8 +92,51 @@ class MedicalReasoningLLM:
             
         except Exception as e:
             logger.error(f"Ollama generation failed: {e}")
-            # Fallback or re-raise
             raise RuntimeError(f"Ollama generation failed: {e}")
+
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: Optional[int] = None,
+        temperature: float = 0.7,
+    ) -> str:
+        """Generate chat response using Ollama /api/chat."""
+        
+        effective_max_tokens = min(max_tokens or self.config.max_tokens, self.config.max_tokens)
+        
+        # Use the chat endpoint
+        chat_url = self.ollama_url.replace("/api/generate", "/api/chat")
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": effective_max_tokens,
+            }
+        }
+
+        try:
+            import httpx
+            logger.info(f"Calling Ollama chat ({self.model_name})")
+            
+            response = httpx.post(
+                chat_url, 
+                json=payload, 
+                timeout=self.config.timeout_seconds
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            # Ollama chat response format: {"message": {"role": "assistant", "content": "..."}}
+            text = result.get("message", {}).get("content", "")
+            
+            return self._response_postprocess(text)
+            
+        except Exception as e:
+            logger.error(f"Ollama chat failed: {e}")
+            raise RuntimeError(f"Ollama chat failed: {e}")
 
     def stream_generate(
         self,

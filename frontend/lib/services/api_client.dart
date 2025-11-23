@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 ///   --dart-define=API_BASE_URL=http://<your-mac-ip>:8000
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://192.168.0.141:8000',
+  defaultValue: 'https://corded-indefensible-eliza.ngrok-free.dev',
 );
 
 class ApiClient {
@@ -21,7 +21,7 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> listCases() async {
     final uri = Uri.parse('$baseUrl/cases/');
     final res = await http.get(uri).timeout(
-      const Duration(seconds: 10),
+      const Duration(seconds: 30),
       onTimeout: () {
         throw Exception('Failed to load cases: Request timed out');
       },

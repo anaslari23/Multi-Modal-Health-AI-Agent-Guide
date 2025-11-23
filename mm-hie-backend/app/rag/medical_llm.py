@@ -36,14 +36,14 @@ class FineTunedMedicalLLM:
         self._tokenizer.padding_side = "right"
         
         # Load base model
-        # Use explicit CPU loading to avoid "auto" issues on Mac
-        device_map = "auto" if torch.cuda.is_available() else "cpu"
+        # Use "auto" for GPU (deployment), None for CPU (local Mac)
+        device_map = "auto" if torch.cuda.is_available() else None
         print(f"Loading base model {self.base_model_name} with device_map={device_map}...")
         
         base_model = AutoModelForCausalLM.from_pretrained(
             self.base_model_name,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map=None, # Let transformers handle it
+            device_map=device_map,
             low_cpu_mem_usage=True
         )
         print("Base model loaded.")

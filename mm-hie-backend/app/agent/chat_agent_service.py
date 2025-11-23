@@ -88,44 +88,58 @@ class ChatAgentService:
         except Exception:
             pass  # Fail gracefully if DB access fails
 
-        prompt = f"""{DOCTOR_SYSTEM_PROMPT}
+        # Check for symptoms to query specialist model
+        symptoms = slot_result.slots.get("symptoms")
+        medicine_context = ""
+        reply = ""
+        
+        if symptoms:
+            try:
+                # Query fine-tuned model for medicine suggestions
+                from ..rag.medical_llm import get_medical_llm
+                from pathlib import Path
+                
+                if Path("./models/medical-medicine-lora").exists():
+                    llm = get_medical_llm()
+                    print(f"Querying specialist model for symptoms: {symptoms}")
+                    # Ask specific question matching training format
+                    suggestion = llm.medicine_suggestion(symptoms)
+                    medicine_context = f"Specialist Recommendation for {symptoms}: {suggestion}"
+            except Exception as e:
+                print(f"Fine-tuned model query failed: {e}")
 
-Context:
+        # Construct Messages for Chat API
+        # We use structured messages (System + User) to prevent prompt regurgitation
+        user_content = f"""Context:
 Patient ID: {case_id}
 {symptoms_text}
 
 Patient History:
 {history_text}
+"""
 
-Current Patient Input: "{text}"
-Doctor:"""
+        # Add specialist info to prompt context if available
+        if medicine_context:
+            user_content += f"\n\n[Internal Consultation]\n{medicine_context}\n\nInstruction: Incorporate the Specialist Recommendation above to advise the patient."
 
-        # 4. Generate Response via LLM
-        # 4. Generate Response via LLM
-        reply = ""
-        try:
-            # Try fine-tuned model first if available
-            from ..rag.medical_llm import get_medical_llm
-            from pathlib import Path
-            
-            # Check if model exists before trying to load
-            if Path("./models/medical-medicine-lora").exists():
-                llm = get_medical_llm()
-                # Format for instruction tuning
-                instruction = f"{prompt}\n\nProvide a helpful medical response."
-                reply = llm.generate(instruction, max_new_tokens=256)
-        except Exception as e:
-            print(f"Fine-tuned model failed, falling back to Ollama: {e}")
+        user_content += f'\n\nCurrent Patient Input: "{text}"'
+
+        messages = [
+            {"role": "system", "content": DOCTOR_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content}
+        ]
+
+        # Always use Base Model (Ollama) for the conversation flow
+        # This avoids hallucination from the fine-tuned model which expects specific prompts
 
         if not reply:
             try:
-                # "Train" / prompt the model to be a doctor
-                response_text = medical_reasoner.generate(
-                    prompt,
+                # Use chat endpoint which handles templates automatically
+                reply = medical_reasoner.chat(
+                    messages,
                     max_tokens=256,
                     temperature=0.7
                 )
-                reply = response_text.strip()
             except Exception as e:
                 # Fallback if LLM fails (e.g. model not loaded/OOM)
                 reply = f"I'm having trouble accessing my medical reasoning module ({e}). Please describe your symptoms in more detail."
