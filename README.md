@@ -15,29 +15,37 @@ backed by medical knowledge retrieval.
 ## System Architecture Overview
 ```mermaid
 flowchart LR
+    %% Define Styles
+    classDef frontend fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000;
+    classDef backend fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
+    classDef ai fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000;
+    classDef db fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#000;
+
     subgraph Client [Flutter Frontend]
-        UI["Intake, DDX, Imaging, Report Screens"]
-        CHAT["Chat Interface"]
-        SEARCH["Medicine Search"]
-        ANALYTICS["Analytics Dashboard"]
+        UI["Intake, DDX, Imaging, Report Screens"]:::frontend
+        CHAT["Chat Interface"]:::frontend
+        SEARCH["Medicine Search"]:::frontend
+        ANALYTICS["Analytics Dashboard"]:::frontend
     end
 
     subgraph API [FastAPI Backend]
-        ORCH["Orchestrator & AgentBrain"]
-        AGENT["Chat Agent Service"]
-        RAG["RAG Engine"]
-        FUSION["Bayesian Fusion Engine"]
-        XAI["XAI Modules (Labs, NLP, Grad-CAM)"]
-        PDF["PDF Report Generator"]
-        DB[("DB / Persistence")]
-        MED_DB[("Medicine DB")]
+        ORCH["Orchestrator & AgentBrain"]:::backend
+        AGENT["Chat Agent Service"]:::backend
+        RAG["RAG Engine"]:::backend
+        FUSION["Bayesian Fusion Engine"]:::backend
+        XAI["XAI Modules (Labs, NLP, Grad-CAM)"]:::backend
+        PDF["PDF Report Generator"]:::backend
+        DB[("DB / Persistence")]:::db
+        MED_DB[("Medicine DB")]:::db
+        MED_ROUTER["Medical LLM Router"]:::backend
     end
 
     subgraph Models [ML / Foundation Models]
-        LLM["Medical Reasoning LLM"]
-        NLPModel["NLP / Symptom Classifier"]
-        ImgModel["Imaging Model"]
-        VectorStore["Vector Store (FAISS)"]
+        LLM["Medical Reasoning LLM (20B)"]:::ai
+        FINE_TUNED["Fine-Tuned LLM (TinyLlama)"]:::ai
+        NLPModel["NLP / Symptom Classifier"]:::ai
+        ImgModel["Imaging Model"]:::ai
+        VectorStore["Vector Store (FAISS)"]:::db
     end
 
     UI -->|REST / JSON| ORCH
@@ -53,6 +61,7 @@ flowchart LR
     AGENT --> RAG
     RAG --> VectorStore
     RAG --> LLM
+    MED_ROUTER --> FINE_TUNED
     PDF -->|/report.pdf| UI
     XAI -->|/static assets| UI
 ```
@@ -60,35 +69,45 @@ flowchart LR
 ## UI Wireframes (Conceptual)
 ```mermaid
 flowchart LR
-    Chat["Chat Interface\n(conversational intake)"] --> Intake["Patient Intake\n(symptoms, labs, vitals)"]
-    Intake --> DDX["Differential Diagnosis Screen\n(posterior, radar chart, vitals)"]
-    DDX --> Imaging["Imaging Review Screen\n(X-ray, Grad-CAM overlays)"]
-    Imaging --> Report["Clinical Report & Timeline\n(Posterior, agent summary, XAI)"]
-    Report --> Export["Export PDF Report"]
+    %% Define Styles
+    classDef default fill:#fff,stroke:#333,stroke-width:1px;
+    classDef newFeature fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000;
+    classDef core fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000;
+
+    Chat["Chat Interface\n(conversational intake)"]:::core --> Intake["Patient Intake\n(symptoms, labs, vitals)"]:::core
+    Intake --> DDX["Differential Diagnosis Screen\n(posterior, radar chart, vitals)"]:::core
+    DDX --> Imaging["Imaging Review Screen\n(X-ray, Grad-CAM overlays)"]:::core
+    Imaging --> Report["Clinical Report & Timeline\n(Posterior, agent summary, XAI)"]:::core
+    Report --> Export["Export PDF Report"]:::core
     
     subgraph New Features
-        Search["Medicine Search\n(details, interactions)"]
-        Analytics["Analytics Dashboard\n(cohorts, risk)"]
+        Search["Medicine Search\n(details, interactions)"]:::newFeature
+        Analytics["Analytics Dashboard\n(cohorts, risk)"]:::newFeature
     end
 ```
 
 ## End-to-End Process Flow
 ```mermaid
 flowchart TD
-    A[Start New Case in Flutter] --> B[Create Case via /cases]
-    B --> C1[Option 1: Chat with Agent]
-    B --> C2[Option 2: Direct Symptom Input]
-    C1 --> D[Agent Extracts Structured Data]
+    %% Define Styles
+    classDef userAction fill:#E1F5FE,stroke:#0277BD,stroke-width:2px,color:#000;
+    classDef systemProcess fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#000;
+    classDef aiProcess fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000;
+
+    A[Start New Case in Flutter]:::userAction --> B[Create Case via /cases]:::systemProcess
+    B --> C1[Option 1: Chat with Agent]:::userAction
+    B --> C2[Option 2: Direct Symptom Input]:::userAction
+    C1 --> D[Agent Extracts Structured Data]:::aiProcess
     C2 --> D
-    D --> E[Add Labs & Vitals]
-    E --> F[Upload Imaging]
-    F --> G[Run /analysis]
-    G --> H[Bayesian Fusion & AgentBrain Reasoning]
-    H --> I[Generate XAI Artefacts & Grad-CAM]
-    I --> J[Render DDX & Imaging Views in Flutter]
-    J --> K[Generate PDF /report]
-    K --> L[Download PDF report]
-    L --> M[Review & Document in Clinical Workflow]
+    D --> E[Add Labs & Vitals]:::userAction
+    E --> F[Upload Imaging]:::userAction
+    F --> G[Run /analysis]:::systemProcess
+    G --> H[Bayesian Fusion & AgentBrain Reasoning]:::aiProcess
+    H --> I[Generate XAI Artefacts & Grad-CAM]:::aiProcess
+    I --> J[Render DDX & Imaging Views in Flutter]:::userAction
+    J --> K[Generate PDF /report]:::systemProcess
+    K --> L[Download PDF report]:::userAction
+    L --> M[Review & Document in Clinical Workflow]:::userAction
 ```
 
 ### Analysis API Sequence (Detailed)
@@ -134,6 +153,7 @@ sequenceDiagram
     - `agent_router.py` – Chat API endpoints.
   - `app/rag/` – **Retrieval-Augmented Generation system**:
     - `rag_engine.py` – Core RAG engine for knowledge retrieval.
+    - `medical_llm.py` – **Fine-tuned Medical LLM** (TinyLlama + LoRA).
     - `vector_store.py` – FAISS-based vector storage.
     - `embedder.py` – Sentence transformer embeddings.
     - `retrievers.py` – BM25 and semantic retrieval.
@@ -148,6 +168,7 @@ sequenceDiagram
     - `timeline_router.py` – Case timeline endpoints.
     - `reports_router.py` – Report generation endpoints.
     - `medicines_router.py` – Medicine search endpoints.
+    - `medical_llm_router.py` – Fine-tuned LLM endpoints.
   - `app/fusion/bayes_updater.py` – Bayesian posterior updater for per‑condition probabilities.
   - `app/agent_brain.py` – Autonomous reasoning agent (`AgentBrain`).
   - `app/xai/` – Explainability modules (labs SHAP, NLP token highlights, Grad‑CAM utilities).
@@ -253,7 +274,7 @@ generated by Flutter.
   - Agent responses are augmented with retrieved medical knowledge.
   - Improves accuracy and provides evidence-based recommendations.
 
-### Medical Reasoning LLM
+### Medical Reasoning LLM (General Purpose)
 
 - **Model**: `dousery/medical-reasoning-gpt-oss-20b` (20B parameters)
 - **Features**:
@@ -267,6 +288,13 @@ generated by Flutter.
   - FP16: 40–50 GB GPU VRAM
   - 8-bit/4-bit quantization: 16–24 GB VRAM
   - CPU-only: >64 GB RAM (not recommended for production)
+
+### Fine-Tuned Medical LLM (Specialized)
+
+- **Model**: `TinyLlama-1.1B-Chat` with LoRA adapters.
+- **Purpose**: Optimized for medicine suggestions, information retrieval, and contraindication checks.
+- **Efficiency**: Lightweight model suitable for faster inference and lower resource usage.
+- **Integration**: Accessed via dedicated endpoints (`/medical-llm/*`).
 
 ### Federated Learning
 
@@ -351,6 +379,15 @@ For resource-constrained environments, consider:
   - Query param: `q` (search term).
   - Returns: List of medicines with details.
 
+#### Medical LLM (Fine-Tuned)
+- `POST /medical-llm/suggest` – Suggest medicines for a disease.
+  - Body: `{ "disease": "...", "patient_info": "..." }`
+- `POST /medical-llm/info` – Get information about a specific medicine.
+  - Body: `{ "medicine_name": "..." }`
+- `POST /medical-llm/contraindications` – Get contraindications for a medicine.
+  - Body: `{ "medicine_name": "..." }`
+- `GET /medical-llm/health` – Check model availability.
+
 #### Conversational Agent
 - `POST /agent/chat` – Chat with the conversational agent.
   - Body: `{ "message": "I have a headache", "case_id": "optional" }`
@@ -360,6 +397,9 @@ For resource-constrained environments, consider:
 - `POST /rag/query` – Query medical knowledge base.
   - Body: `{ "query": "What are the symptoms of pneumonia?", "top_k": 5 }`
   - Returns: Retrieved documents with relevance scores.
+- `POST /rag/diagnose` – Get diagnostic suggestions based on symptoms.
+- `POST /rag/treatment` – Get treatment options.
+- `POST /rag/drug` – Get drug information.
 
 #### LLM (Direct Generation)
 - `POST /llm/generate` – Direct LLM generation.
