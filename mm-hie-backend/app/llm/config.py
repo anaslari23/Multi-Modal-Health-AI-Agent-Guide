@@ -22,6 +22,7 @@ class LLMConfig:
     quantize: str = "none"  # none|bitsandbytes|gptq|gguf
     timeout_seconds: int = 120
     max_input_length: int = 4096
+    temperature: float = 0.7
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
@@ -55,6 +56,8 @@ class LLMConfig:
 
         max_input_length = int(os.getenv("MMHIE_MAX_INPUT_LENGTH", str(cls.max_input_length)))
 
+        temperature = float(os.getenv("MMHIE_TEMPERATURE", "0.7"))
+
         return cls(
             model_name=model_name,
             device=device,
@@ -64,4 +67,5 @@ class LLMConfig:
             quantize=quantize,
             timeout_seconds=timeout_seconds,
             max_input_length=max_input_length,
+            temperature=temperature,
         )

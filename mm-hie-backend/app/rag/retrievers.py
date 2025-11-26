@@ -56,11 +56,30 @@ class HybridRetriever:
         bm25_scores = self._bm25_scores(query, top_k * 4)
         emb_scores = self._emb_scores(query_vector, top_k * 4)
 
-        all_indices = set(bm25_scores.keys()) | set(emb_scores.keys())
+        # Normalize BM25 scores to [0, 1]
+        if bm25_scores:
+            min_b = min(bm25_scores.values())
+            max_b = max(bm25_scores.values())
+            range_b = max_b - min_b if max_b > min_b else 1.0
+            norm_bm25 = {k: (v - min_b) / range_b for k, v in bm25_scores.items()}
+        else:
+            norm_bm25 = {}
+
+        # Normalize Embedding scores to [0, 1]
+        # Note: emb_scores are negative distances (closer = higher, e.g. -0.2 > -0.5)
+        if emb_scores:
+            min_e = min(emb_scores.values())
+            max_e = max(emb_scores.values())
+            range_e = max_e - min_e if max_e > min_e else 1.0
+            norm_emb = {k: (v - min_e) / range_e for k, v in emb_scores.items()}
+        else:
+            norm_emb = {}
+
+        all_indices = set(norm_bm25.keys()) | set(norm_emb.keys())
         fused: List[RetrievedChunk] = []
         for idx in all_indices:
-            b = bm25_scores.get(idx, 0.0)
-            e = emb_scores.get(idx, 0.0)
+            b = norm_bm25.get(idx, 0.0)
+            e = norm_emb.get(idx, 0.0)
             score = self.bm25_weight * b + self.embed_weight * e
             fused.append(
                 RetrievedChunk(

@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-from llama_cpp import Llama
 
 from .embedder import build_embedder
 from .prompts import (
@@ -16,50 +15,35 @@ from .prompts import (
 )
 from .retrievers import HybridRetriever
 from .vector_store import VectorStore
+from ..llm.reasoning_model import medical_reasoner
 
 
-DEFAULT_MODEL_PATH = Path("./models/llama/ggml-model.Q4_K_M.gguf")
 DEFAULT_CORPUS_PATH = Path("app/rag/datasets/corpus/merged_corpus.jsonl")
 DEFAULT_INDEX_PATH = Path("app/rag/datasets/corpus/vector_index")
 
 
 class RAGEngine:
-    """Lightweight RAG engine for clinical reasoning on CPU / MPS.
+    """Lightweight RAG engine for clinical reasoning.
 
-    - Uses llama.cpp GGUF models via llama-cpp-python.
-    - Uses sentence-transformers embeddings + FAISS + BM25.
+    - Uses `medical_reasoner` (Ollama/LiteLLM) for generation.
+    - Uses sentence-transformers embeddings + FAISS + BM25 for retrieval.
     """
 
     def __init__(
         self,
-        model_path: Union[Path, str ]= DEFAULT_MODEL_PATH,
-        corpus_path: Union[Path, str ]= DEFAULT_CORPUS_PATH,
-        index_path: Union[Path, str ]= DEFAULT_INDEX_PATH,
+        corpus_path: Union[Path, str] = DEFAULT_CORPUS_PATH,
+        index_path: Union[Path, str] = DEFAULT_INDEX_PATH,
         prefer_jina_embeddings: bool = False,
     ) -> None:
-        self.model_path = Path(model_path)
         self.corpus_path = Path(corpus_path)
         self.index_path = Path(index_path)
 
-        self._llm: Optional[Llama] = None
         self._embedder = build_embedder(prefer_jina=prefer_jina_embeddings)
         self._vector_store: Optional[VectorStore] = None
         self._retriever: Optional[HybridRetriever] = None
         self._corpus: List[Dict[str, Any]] = []
 
     # --- Lazy loading --------------------------------------------------------
-
-    def _ensure_llm(self) -> None:
-        if self._llm is not None:
-            return
-        if not self.model_path.exists():
-            raise RuntimeError(f"LLM model not found at {self.model_path}. Please place a GGUF file there.")
-        # llama-cpp will auto-detect CPU / MPS. Keep context small for local use.
-        self._llm = Llama(
-            model_path=str(self.model_path),
-            n_ctx=2048,
-            n_threads=4,
-        )
 
     def _load_corpus(self) -> None:
         if self._corpus:
@@ -147,16 +131,16 @@ class RAGEngine:
         return "\n\n".join(parts)
 
     def _llm_generate(self, prompt: str, max_tokens: int = 512) -> str:
-        self._ensure_llm()
-        assert self._llm is not None
-        out = self._llm(
-            prompt,
-            max_tokens=max_tokens,
-            temperature=0.2,
-            top_p=0.9,
-            stop=["</s>", "###"],
-        )
-        return out.get("choices", [{}])[0].get("text", "").strip()
+        # Use the shared medical_reasoner instance (Ollama/LiteLLM)
+        try:
+            return medical_reasoner.generate(
+                prompt,
+                max_tokens=max_tokens,
+                temperature=0.1,  # Lower temperature for more factual responses
+            )
+        except Exception as e:
+            print(f"LLM generation failed: {e}")
+            return "I apologize, but I am unable to generate a response at this time due to a technical issue."
 
     # --- Public API ----------------------------------------------------------
 
@@ -178,9 +162,10 @@ class RAGEngine:
 {ctx_str}
 
 ### Task:
-Provide a concise, clinically safe answer.
-IMPORTANT: Cite sources using [Source: Title] format if available in the context.
-Do NOT hallucinate medicines.
+Provide a concise, clinically safe answer based ONLY on the Retrieved Medical Knowledge above.
+If the answer is not in the context, say "I do not have enough information to answer this."
+IMPORTANT: Cite sources using [Source: Title] format.
+Do NOT hallucinate medicines or facts not present in the context.
 """
         answer = self._llm_generate(prompt)
         return {"answer": answer, "context": ctx_items}
